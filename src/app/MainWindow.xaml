@@ -1,0 +1,959 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="hyprv_app.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:hyprv_app"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="hyprv">
+
+    <!--
+        Windows-Terminal-style title bar in Row 0; window-level chrome in Row 1.
+          - Row 0: TabView with title bar buttons (hamburger / info / settings /
+            drag region / caption reserve). Each TabViewItem's content is
+            empty — the actual VmTabPage projection is mounted into
+            tabContentHost (Row 1, column 2) on tab selection change. This
+            keeps the rail + flyout per-Window rather than per-tab so
+            tab-tear-away (future) gives each new MainWindow its own rail.
+          - Row 1: 5-column Grid — rail | rail-splitter | tabContentHost |
+            flyout-splitter | flyout.
+    -->
+    <!--
+        Named so ApplyAppearance can paint the root opaque black when the
+        Black theme is selected. With the default transparent Background,
+        the SystemBackdrop (Mica/Acrylic) shows through and washes any
+        attempt to darken via brush overrides — Black needs both no
+        backdrop AND a solid black brush here to actually read as black.
+    -->
+    <Grid x:Name="rootGrid"
+          Background="Transparent"
+          AllowDrop="True"
+          DragOver="OnWindowDragOver"
+          Drop="OnWindowDrop">
+        <Grid.RowDefinitions>
+            <!-- Tab strip is pinned to exactly 32 DIP so it can't inflate
+                 from TabView internal chrome (separator rows, padding,
+                 etc.). The accent underline now lives in the tab's
+                 background gradient (zero layout allocation) so the prior
+                 reason for Auto-sizing — leaving room for an underline
+                 sliver — no longer applies. Hard pin = no wasted space
+                 between the strip and the VM render below. -->
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TabView Grid.Row="0"
+                 x:Name="tabView"
+                 IsAddTabButtonVisible="True"
+                 TabWidthMode="SizeToContent"
+                 CanDragTabs="True"
+                 CanReorderTabs="True"
+                 AllowDrop="True"
+                 CloseButtonOverlayMode="OnPointerOver"
+                 SelectionChanged="OnTabSelectionChanged"
+                 TabCloseRequested="OnTabCloseRequested"
+                 AddTabButtonClick="OnAddTabButtonClick"
+                 TabDragStarting="OnTabDragStarting"
+                 DragOver="OnWindowDragOver"
+                 Drop="OnTabViewDrop"
+                 TabDragCompleted="OnTabDragCompleted"
+                 HorizontalAlignment="Stretch"
+                 VerticalAlignment="Stretch"
+                 Padding="0"
+                 BorderThickness="0">
+            <!--
+                Terminal-y flat-tab styling:
+                  - NO background fills on any tab state (selected, hover,
+                    etc.). Hover gets a very subtle wash via the
+                    BackgroundPointerOver brush, nothing else.
+                  - Selected tab is marked by a 2 DIP accent-color UNDERLINE
+                    (BorderThickness=0,0,0,2 with the selected brush set to
+                    accent; other state brushes are transparent so the line
+                    only appears for the active tab).
+                  - Unselected tab text dims (TextFillColorSecondary);
+                    selected uses TextFillColorPrimary. Reads at a glance
+                    without any chrome.
+                  - Close button hidden until the user hovers (matches the
+                    Windows Terminal feel — tabs stay clean while idle).
+                  - Square corners (CornerRadius=0). No rounded-top-only
+                    asymmetry hack needed anymore.
+            -->
+            <TabView.Resources>
+              <!--
+                  Wrapping all resources in a single explicit
+                  ResourceDictionary so we can add ThemeDictionaries —
+                  the shorthand <TabView.Resources>{children}</TabView.Resources>
+                  doesn't allow mixing an explicit ResourceDictionary
+                  with inline sibling resources, and we need both.
+
+                  ThemeDictionaries below hold the aliases that depend
+                  on a theme-aware brush. Plain <StaticResource> aliases
+                  outside ThemeDictionaries resolve ONCE at parse time —
+                  so an alias to TextFillColorSecondaryBrush picks up
+                  whatever the theme was when XAML loaded and never
+                  updates on a runtime RequestedTheme switch. Tab text
+                  ended up invisible after Dark → Light for this reason.
+                  Declaring the alias in both per-theme dictionaries lets
+                  the framework re-resolve through the active theme
+                  dictionary on each ThemeResource lookup.
+              -->
+              <ResourceDictionary>
+                <ResourceDictionary.ThemeDictionaries>
+                    <ResourceDictionary x:Key="Light">
+                        <StaticResource x:Key="TabViewItemHeaderBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderBackgroundPressed"     ResourceKey="SubtleFillColorTertiaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderForeground"            ResourceKey="TextFillColorSecondaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderForegroundSelected"    ResourceKey="TextFillColorPrimaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderForegroundPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderForegroundPressed"     ResourceKey="TextFillColorPrimaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderForegroundDisabled"    ResourceKey="TextFillColorDisabledBrush" />
+                    </ResourceDictionary>
+                    <ResourceDictionary x:Key="Dark">
+                        <StaticResource x:Key="TabViewItemHeaderBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderBackgroundPressed"     ResourceKey="SubtleFillColorTertiaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderForeground"            ResourceKey="TextFillColorSecondaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderForegroundSelected"    ResourceKey="TextFillColorPrimaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderForegroundPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderForegroundPressed"     ResourceKey="TextFillColorPrimaryBrush" />
+                        <StaticResource x:Key="TabViewItemHeaderForegroundDisabled"    ResourceKey="TextFillColorDisabledBrush" />
+                    </ResourceDictionary>
+                </ResourceDictionary.ThemeDictionaries>
+
+                <!--
+                    Scope-override ControlCornerRadius to 0 inside the
+                    TabView. The '+' add-tab button and the per-tab close
+                    X are both regular Buttons in WinUI's TabView template
+                    and pick up the default ControlCornerRadius=4, which
+                    leaves their hover backgrounds visibly inset from
+                    their bounds. Setting it here flattens them without
+                    touching the rest of the app.
+                -->
+                <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
+
+                <x:Double x:Key="TabViewItemHeaderHeight">32</x:Double>
+                <x:Double x:Key="TabViewItemHeaderMinHeight">32</x:Double>
+                <!-- Tighter horizontal padding (was 10) brings adjacent
+                     tabs visually closer. Total inter-tab gap is now
+                     2*6 = 12 DIP. -->
+                <Thickness x:Key="TabViewItemHeaderPadding">6,2,6,2</Thickness>
+                <Thickness x:Key="TabViewHeaderPadding">0</Thickness>
+                <Thickness x:Key="TabViewItemMargin">0</Thickness>
+                <x:Double x:Key="TabViewItemSeparatorMargin">0</x:Double>
+                <x:Double x:Key="TabViewItemAddButtonHeight">32</x:Double>
+                <SolidColorBrush x:Key="TabViewBackground" Color="Transparent" />
+
+                <!--
+                    Kill any natural TabView control border so nothing
+                    paints a horizontal divider line between the strip
+                    and the content area below. (Prior versions of this
+                    file relied on BorderThickness="0,0,0,1" on the
+                    individual tab headers for the selected-underline;
+                    that allocated a height slot which showed through as
+                    a "wandering" seam on unselected tabs.)
+                -->
+                <SolidColorBrush x:Key="TabViewBorderBrush" Color="Transparent" />
+                <Thickness       x:Key="TabViewBorderThickness">0</Thickness>
+
+                <!--
+                    Underline indicator via BACKGROUND gradient, not border.
+                    A 2 DIP accent stripe is painted in the bottom of the
+                    selected tab's background; the rest is transparent.
+                    Because this is a background fill (not a Border), it
+                    allocates ZERO layout space — the tab content stays
+                    perfectly centered in the same 32 DIP slot the
+                    hamburger / + / caption buttons occupy, and there's
+                    no seam at the strip's bottom edge.
+
+                    Offset 0.9375 = (32-2)/32 = 30/32, i.e. the stripe
+                    runs from y=30 to y=32 within the 32 DIP tab. Two
+                    GradientStops at the same offset create a hard
+                    transition (not a smooth gradient).
+                -->
+                <!--
+                    Selected-state gradient: fully transparent top, solid
+                    accent stripe at the bottom 6% (the underline). The
+                    same gradient is reused for the hover/press variants
+                    of the selected tab so cursor movement over the
+                    active tab doesn't change its background. Unselected
+                    tabs use SubtleFillColor* on hover/press.
+
+                    A faint 1 DIP outline drawn by the WinUI default
+                    template around the selected tab remains visible —
+                    we accept it rather than mask it with a fill (which
+                    contradicts the "no fill" terminal aesthetic).
+                -->
+                <SolidColorBrush x:Key="TabViewItemHeaderBackground"         Color="Transparent" />
+                <LinearGradientBrush x:Key="TabViewItemHeaderBackgroundSelected"
+                                     StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Offset="0"      Color="Transparent" />
+                    <GradientStop Offset="0.9375" Color="Transparent" />
+                    <GradientStop Offset="0.9375" Color="{ThemeResource SystemAccentColor}" />
+                    <GradientStop Offset="1"      Color="{ThemeResource SystemAccentColor}" />
+                </LinearGradientBrush>
+                <LinearGradientBrush x:Key="TabViewItemHeaderBackgroundSelectedPointerOver"
+                                     StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Offset="0"      Color="Transparent" />
+                    <GradientStop Offset="0.9375" Color="Transparent" />
+                    <GradientStop Offset="0.9375" Color="{ThemeResource SystemAccentColor}" />
+                    <GradientStop Offset="1"      Color="{ThemeResource SystemAccentColor}" />
+                </LinearGradientBrush>
+                <LinearGradientBrush x:Key="TabViewItemHeaderBackgroundSelectedPressed"
+                                     StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Offset="0"      Color="Transparent" />
+                    <GradientStop Offset="0.9375" Color="Transparent" />
+                    <GradientStop Offset="0.9375" Color="{ThemeResource SystemAccentColor}" />
+                    <GradientStop Offset="1"      Color="{ThemeResource SystemAccentColor}" />
+                </LinearGradientBrush>
+                <!-- Pointer-over / Pressed / Foreground brushes live in
+                     ThemeDictionaries above so they re-resolve on a
+                     RequestedTheme switch. Only the theme-invariant
+                     Disabled background stays here as a literal. -->
+                <SolidColorBrush x:Key="TabViewItemHeaderBackgroundDisabled"    Color="Transparent" />
+
+                <!-- All borders off — the underline is in the background
+                     gradient. Zero thickness for all states so no layout
+                     allocation. -->
+                <SolidColorBrush x:Key="TabViewItemHeaderBorderBrush"            Color="Transparent" />
+                <SolidColorBrush x:Key="TabViewItemHeaderBorderBrushSelected"    Color="Transparent" />
+                <SolidColorBrush x:Key="TabViewItemHeaderBorderBrushPointerOver" Color="Transparent" />
+                <SolidColorBrush x:Key="TabViewItemHeaderBorderBrushPressed"     Color="Transparent" />
+                <SolidColorBrush x:Key="TabViewItemHeaderBorderBrushDisabled"    Color="Transparent" />
+                <Thickness       x:Key="TabViewItemHeaderBorderThickness">0</Thickness>
+
+                <!-- Square corners — the gradient does the marking. -->
+                <CornerRadius x:Key="TabViewItemHeaderCornerRadius">0</CornerRadius>
+
+                <!-- Kill the tab-to-tab separator (the 1 DIP vertical line
+                     between adjacent tab headers). Width was already 0;
+                     painting it transparent ensures no leftover hairline. -->
+                <SolidColorBrush x:Key="TabViewItemSeparator" Color="Transparent" />
+
+                <Style TargetType="TabViewItem">
+                    <Setter Property="Height" Value="32" />
+                    <Setter Property="Padding" Value="6,2,6,2" />
+                    <Setter Property="VerticalContentAlignment" Value="Center" />
+                    <Setter Property="CornerRadius" Value="0" />
+                    <!-- Kill the TabViewItem control-level border too
+                         (separate from the header border zeroed via theme
+                         resources). Without this the selected tab gets a
+                         faint dark outline from the default selection
+                         visual on top/left/bottom edges. -->
+                    <Setter Property="BorderBrush" Value="Transparent" />
+                    <Setter Property="BorderThickness" Value="0" />
+                    <Setter Property="UseSystemFocusVisuals" Value="False" />
+                    <Setter Property="HeaderTemplate">
+                        <Setter.Value>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}"
+                                           VerticalAlignment="Center"
+                                           TextLineBounds="Tight" />
+                            </DataTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+              </ResourceDictionary>
+            </TabView.Resources>
+
+            <TabView.TabStripHeader>
+                <!-- Just the hamburger. No padding above so it sits at y=0,
+                     matching the system caption buttons on the right.
+                     CornerRadius=0 so the hover background fills the
+                     entire 32x46 button bounds (default Button style has
+                     CornerRadius=4 which leaves a visible inset gap). -->
+                <Button x:Name="hamburgerBtn"
+                        Click="OnHamburgerClick"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CornerRadius="0"
+                        Height="32"
+                        Width="46"
+                        VerticalAlignment="Top"
+                        UseSystemFocusVisuals="False"
+                        ToolTipService.ToolTip="Toggle VM rail">
+                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE700;" FontSize="14" />
+                </Button>
+            </TabView.TabStripHeader>
+
+            <TabView.TabStripFooter>
+                <!-- Also a tab drop target: the TabView's AllowDropTabs claims
+                     this trailing/footer area but only raises TabStripDrop over
+                     the tabs themselves, so without its own AllowDrop a drop on
+                     the empty title-bar shows a no-drop cursor. Its handlers are
+                     shared with the window body (OnWindowDrop: row 0 = move into
+                     this window). -->
+                <Grid x:Name="titleBarTrailing" Background="Transparent"
+                      AllowDrop="True"
+                      DragOver="OnWindowDragOver"
+                      Drop="OnWindowDrop">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" x:Name="captionButtonReserve" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Drag region — grab here to move the window. -->
+                    <Grid Grid.Column="0" x:Name="dragRegion" Background="Transparent" />
+
+                    <!-- Debugger launch — hidden unless the global feature
+                         toggle is on; enabled when the active VM tab has
+                         debugger arguments configured. UpdateDebuggerButton
+                         drives both states. -->
+                    <Button Grid.Column="1"
+                            x:Name="debugBtn"
+                            Click="OnDebuggerClick"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="0"
+                            Height="32"
+                            Width="46"
+                            VerticalAlignment="Top"
+                            Visibility="Collapsed"
+                            UseSystemFocusVisuals="False"
+                            ToolTipService.ToolTip="Launch debugger">
+                        <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xEBE8;" FontSize="14" />
+                    </Button>
+
+                    <!-- Info button — mirror of the hamburger at the top left.
+                         Toggles the right info flyout for the current tab's VM.
+                         CornerRadius=0 so the hover bg fills the full bounds. -->
+                    <Button Grid.Column="2"
+                            x:Name="infoBtn"
+                            Click="OnInfoClick"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="0"
+                            Height="32"
+                            Width="46"
+                            VerticalAlignment="Top"
+                            UseSystemFocusVisuals="False"
+                            ToolTipService.ToolTip="Toggle info panel">
+                        <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE946;" FontSize="14" />
+                    </Button>
+
+                    <!-- Settings. Top-aligned to match the system caption row.
+                         CornerRadius=0 so the hover bg fills the full bounds. -->
+                    <Button Grid.Column="3"
+                            x:Name="settingsBtn"
+                            Click="OnSettingsClick"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="0"
+                            Height="32"
+                            Width="46"
+                            VerticalAlignment="Top"
+                            UseSystemFocusVisuals="False"
+                            ToolTipService.ToolTip="Settings">
+                        <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE713;" FontSize="14" />
+                    </Button>
+
+                    <Grid Grid.Column="4" Width="150" />
+                </Grid>
+            </TabView.TabStripFooter>
+
+        </TabView>
+
+        <!-- Row 1 — window-level chrome: rail | splitter | tabContentHost |
+             flyoutSplitter | flyout. -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <!-- Fixed-width rail (resizable via splitter), splitter
+                     (6 DIP grabby strip — enough to land on with the
+                     hover tint as a visual cue, narrow enough to feel
+                     like a divider not a column), content fills the rest.
+                     Hamburger collapses by setting railColumn +
+                     splitterColumn widths to 0; expanding restores the
+                     last user width. -->
+                <ColumnDefinition Width="190" x:Name="railColumn" />
+                <ColumnDefinition Width="6"   x:Name="splitterColumn" />
+                <ColumnDefinition Width="*" />
+                <!-- Right info flyout (#36). flyoutSplitterColumn mirrors
+                     the left one but is 0 when the flyout is closed,
+                     6 when open. flyoutColumn defaults to 0 and toggles
+                     via the info button in the title bar. -->
+                <ColumnDefinition Width="0"   x:Name="flyoutSplitterColumn" />
+                <ColumnDefinition Width="0"   x:Name="flyoutColumn" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left rail (task #34) — collapsible VM browser.
+                 Compact spacing throughout — every DIP saved here is
+                 a DIP gained for VM/RDP. -->
+            <Border Grid.Column="0"
+                    x:Name="leftRail">
+                <Border.Resources>
+                    <!-- Tighter ListView rows (~26 DIP instead of default ~40). -->
+                    <x:Double x:Key="ListViewItemMinHeight">26</x:Double>
+                    <Thickness x:Key="ListViewItemContentMargin">0</Thickness>
+                    <!-- Tighter Expander header + content padding. The
+                         theme resources here cascade to all Expanders
+                         in this Border, so they apply to both sections. -->
+                    <Thickness x:Key="ExpanderHeaderPadding">8,0,8,0</Thickness>
+                    <Thickness x:Key="ExpanderContentPadding">0</Thickness>
+                    <x:Double x:Key="ExpanderMinHeight">28</x:Double>
+                    <x:Double x:Key="ExpanderChevronButtonSize">24</x:Double>
+                    <x:Double x:Key="ExpanderChevronGlyphSize">10</x:Double>
+                    <!-- ListView item background — transparent so the
+                         rail's own background shows through cleanly. -->
+                    <SolidColorBrush x:Key="ListViewItemBackground" Color="Transparent" />
+                </Border.Resources>
+                <ScrollViewer>
+                    <StackPanel>
+                        <Expander Header="Virtual Machines"
+                                  IsExpanded="True"
+                                  Margin="4,2,4,1"
+                                  Padding="0"
+                                  MinHeight="28"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch"
+                                  FontSize="12">
+                            <Grid>
+                                <ListView x:Name="hvVmList"
+                                          SelectionMode="Single"
+                                          SelectionChanged="OnRailVmSelected" />
+                                <!-- Shown while VMManager's initial WMI poll
+                                     is in flight (typically 200-500ms after
+                                     app start). RenderRail hides this once
+                                     it appends the first item; subsequent
+                                     reloads never re-show it. -->
+                                <TextBlock x:Name="hvVmListLoading"
+                                           Text="Loading..."
+                                           FontSize="12"
+                                           Padding="8,4"
+                                           Opacity="0.6" />
+                            </Grid>
+                        </Expander>
+                        <!--
+                            Remote Hosts — saved physical machines the
+                            user can RDP into directly (distinct from
+                            Hyper-V VMs above). Hidden by default; the
+                            renderer flips Visibility to Visible when
+                            Settings.remoteHosts is non-empty. The
+                            structure stays here so when the Tier 2
+                            saved-hosts feature lands, the rail surface
+                            is ready to populate without a XAML diff.
+                        -->
+                        <Expander x:Name="remoteHostsExpander"
+                                  Header="Remote Hosts"
+                                  IsExpanded="True"
+                                  Visibility="Collapsed"
+                                  Margin="4,1,4,2"
+                                  Padding="0"
+                                  MinHeight="28"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch"
+                                  FontSize="12">
+                            <!-- A ListView (not a StackPanel) so single-click
+                                 selection uses the SAME native Fluent highlight
+                                 as the Virtual Machines list above. -->
+                            <ListView x:Name="remoteHostsList"
+                                      SelectionMode="Single"
+                                      SelectionChanged="OnRemoteRailSelectionChanged" />
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Resizable splitter. 6 DIP wide grab strip. The outer Border
+                 stays full-height + transparent so the cursor change and the
+                 drag hit-test cover the whole edge; the inner pill is a small
+                 vertically-centered hint that only appears on hover/drag. -->
+            <Border Grid.Column="1"
+                    x:Name="railSplitter"
+                    Background="Transparent"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,1,0"
+                    PointerEntered="OnSplitterPointerEntered"
+                    PointerExited="OnSplitterPointerExited"
+                    PointerPressed="OnSplitterPointerPressed"
+                    PointerMoved="OnSplitterPointerMoved"
+                    PointerReleased="OnSplitterPointerReleased"
+                    PointerCaptureLost="OnSplitterPointerReleased">
+                <Border x:Name="railSplitterHint"
+                        Width="3"
+                        Height="36"
+                        CornerRadius="1.5"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="{ThemeResource AccentFillColorTertiaryBrush}"
+                        IsHitTestVisible="False"
+                        Visibility="Collapsed" />
+            </Border>
+
+            <!-- Active VmTabPage projection is mounted here on tab selection.
+                 Padding=0 + zero Margin so the mounted content is flush
+                 against the tab strip above (no wasted vertical space —
+                 every DIP between the tab strip and the bottom of the
+                 window goes to the VM render). -->
+            <ContentControl Grid.Column="2"
+                            x:Name="tabContentHost"
+                            Padding="0"
+                            Margin="0"
+                            BorderThickness="0"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch" />
+
+            <!-- Right splitter — mirror of the left one. Hidden (Width=0)
+                 when the flyout is closed. Same hover-pill pattern as the
+                 rail splitter. -->
+            <Border Grid.Column="3"
+                    x:Name="flyoutSplitter"
+                    Background="Transparent"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="1,0,0,0"
+                    PointerEntered="OnSplitterPointerEntered"
+                    PointerExited="OnSplitterPointerExited"
+                    PointerPressed="OnFlyoutSplitterPointerPressed"
+                    PointerMoved="OnFlyoutSplitterPointerMoved"
+                    PointerReleased="OnFlyoutSplitterPointerReleased"
+                    PointerCaptureLost="OnFlyoutSplitterPointerReleased">
+                <Border x:Name="flyoutSplitterHint"
+                        Width="3"
+                        Height="36"
+                        CornerRadius="1.5"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="{ThemeResource AccentFillColorTertiaryBrush}"
+                        IsHitTestVisible="False"
+                        Visibility="Collapsed" />
+            </Border>
+
+            <!-- Right info flyout (#36 shell + #37 properties).
+                 Header: VM name + state line.
+                 Properties grid: two columns (label / value), every
+                 field bound to a named TextBlock the code-behind
+                 refreshes from Msvm_SummaryInformation on every WMI
+                 tick. -->
+            <Border Grid.Column="4"
+                    x:Name="infoFlyout">
+                <!-- Horizontal scroll explicitly disabled so the inner
+                     content stays clamped to the column width and text
+                     actually wraps on the first measure pass. -->
+                <ScrollViewer HorizontalScrollMode="Disabled"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Padding="8" Spacing="4"
+                                HorizontalAlignment="Stretch">
+                        <!-- Compact Expander chrome — match the left rail's
+                             Expander chrome exactly so the two panes look like
+                             siblings rather than each having their own scale.
+                             The theme-resource keys alone weren't enough — the
+                             Expander template also reads MinHeight/Padding/
+                             FontSize from the Expander itself, so an implicit
+                             Style sets those directly. -->
+                        <StackPanel.Resources>
+                            <x:Double  x:Key="ExpanderMinHeight">28</x:Double>
+                            <Thickness x:Key="ExpanderHeaderPadding">8,0,8,0</Thickness>
+                            <Thickness x:Key="ExpanderContentPadding">12,8,12,10</Thickness>
+                            <x:Double  x:Key="ExpanderChevronButtonSize">24</x:Double>
+                            <x:Double  x:Key="ExpanderChevronGlyphSize">10</x:Double>
+                            <Style TargetType="Expander">
+                                <Setter Property="MinHeight" Value="28" />
+                                <!-- The default Expander template binds the
+                                     content presenter's Padding to the control's
+                                     Padding via TemplateBinding (NOT to the
+                                     ExpanderContentPadding theme resource), so
+                                     this setter is what actually pads section
+                                     contents away from the section's edge. -->
+                                <Setter Property="Padding" Value="12,8,12,10" />
+                                <Setter Property="FontSize" Value="12" />
+                                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </StackPanel.Resources>
+                        <TextBlock x:Name="flyoutVmName"
+                                   Text="(no VM selected)"
+                                   FontWeight="SemiBold"
+                                   FontSize="14"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="flyoutVmState"
+                                   Text=""
+                                   FontSize="12"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                        <!-- Properties section — expanded by default; the
+                             info that's most useful at a glance. -->
+                        <Expander x:Name="flyoutPropertiesExpander"
+                                  Header="Properties"
+                                  IsExpanded="True"
+                                  Margin="0,8,0,0"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch">
+                        <Grid x:Name="flyoutPropsGrid">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="90" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Generation"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" x:Name="flyoutGeneration"
+                                       FontSize="12" Margin="0,2,0,2" Text="-"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="vCPUs"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="flyoutVcpus"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Memory"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="flyoutMemory"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="CPU load"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" x:Name="flyoutCpuLoad"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Uptime"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="4" Grid.Column="1" x:Name="flyoutUptime"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Heartbeat"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="5" Grid.Column="1" x:Name="flyoutHeartbeat"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Guest OS"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="6" Grid.Column="1" x:Name="flyoutGuestOs"
+                                       FontSize="12" Margin="0,2,0,2" Text="-"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Grid.Row="7" Grid.Column="0" Text="Created"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="7" Grid.Column="1" x:Name="flyoutCreated"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="8" Grid.Column="0" Text="Config ver."
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="8" Grid.Column="1" x:Name="flyoutVersion"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="9" Grid.Column="0" Text="GUID"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="9" Grid.Column="1" x:Name="flyoutGuid"
+                                       FontSize="11" Margin="0,2,0,2" Text="-"
+                                       FontFamily="Consolas"
+                                       TextWrapping="Wrap"
+                                       IsTextSelectionEnabled="True" />
+
+                            <TextBlock Grid.Row="10" Grid.Column="0" Text="Secure boot"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="10" Grid.Column="1" x:Name="flyoutSecureBoot"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="11" Grid.Column="0" Text="BIOS GUID"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="11" Grid.Column="1" x:Name="flyoutBiosGuid"
+                                       FontSize="11" Margin="0,2,0,2" Text="-"
+                                       FontFamily="Consolas"
+                                       TextWrapping="Wrap"
+                                       IsTextSelectionEnabled="True" />
+
+                            <TextBlock Grid.Row="12" Grid.Column="0" Text="Config path"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="12" Grid.Column="1" x:Name="flyoutConfigPath"
+                                       FontSize="11" Margin="0,2,0,2" Text="-"
+                                       TextWrapping="Wrap"
+                                       IsTextSelectionEnabled="True" />
+
+                            <TextBlock Grid.Row="13" Grid.Column="0" Text="Snapshot path"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="13" Grid.Column="1" x:Name="flyoutSnapshotPath"
+                                       FontSize="11" Margin="0,2,0,2" Text="-"
+                                       TextWrapping="Wrap"
+                                       IsTextSelectionEnabled="True" />
+                        </Grid>
+                        </Expander>
+
+                        <!-- Memory section — mirror of Hyper-V Manager's
+                             Memory tab. Collapsed by default to reduce
+                             flyout noise. -->
+                        <Expander x:Name="flyoutMemoryExpander"
+                                  Header="Memory"
+                                  IsExpanded="False"
+                                  Margin="0,4,0,0"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch">
+                        <Grid x:Name="flyoutMemoryGrid">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Startup memory"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" x:Name="flyoutMemStartup"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Dynamic memory"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="flyoutMemDynamic"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Minimum memory"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="flyoutMemMin"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Maximum memory"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" x:Name="flyoutMemMax"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Assigned memory"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="4" Grid.Column="1" x:Name="flyoutMemAssigned"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Memory demand"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="5" Grid.Column="1" x:Name="flyoutMemDemand"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Memory status"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="6" Grid.Column="1" x:Name="flyoutMemStatus"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+                        </Grid>
+                        </Expander>
+
+                        <!-- Network section — Expander hides itself entirely
+                             when there's nothing to show. -->
+                        <Expander x:Name="flyoutNetworkExpander"
+                                  Header="Network"
+                                  IsExpanded="False"
+                                  Margin="0,4,0,0"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch"
+                                  Visibility="Collapsed">
+                        <StackPanel Spacing="6">
+                        <Grid x:Name="flyoutNetworkGrid">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="90" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Hostname"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" x:Name="flyoutHostname"
+                                       FontSize="12" Margin="0,2,0,2" Text="-"
+                                       TextWrapping="Wrap"
+                                       IsTextSelectionEnabled="True" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="IS version"
+                                       FontSize="12" Margin="0,2,8,2"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="flyoutIsVersion"
+                                       FontSize="12" Margin="0,2,0,2" Text="-" />
+                        </Grid>
+
+                        <!-- Per-adapter detail. Code-behind appends one Border per
+                             NIC into this StackPanel on each refresh. -->
+                        <StackPanel x:Name="flyoutAdaptersHost"
+                                    Spacing="6"
+                                    Margin="0,6,0,0" />
+                        </StackPanel>
+                        </Expander>
+
+                        <!-- Storage section — per-disk rows (VHDs + ISOs). -->
+                        <Expander x:Name="flyoutStorageExpander"
+                                  Header="Storage"
+                                  IsExpanded="False"
+                                  Margin="0,4,0,0"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch"
+                                  Visibility="Collapsed">
+                        <StackPanel x:Name="flyoutDisksHost"
+                                    Spacing="6" />
+                        </Expander>
+
+                        <!-- Notes section — Expander collapses entirely when
+                             the VM has no Notes. -->
+                        <Expander x:Name="flyoutNotesHeader"
+                                  Header="Notes"
+                                  IsExpanded="True"
+                                  Margin="0,4,0,0"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch"
+                                  Visibility="Collapsed">
+                            <TextBlock x:Name="flyoutNotes"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       IsTextSelectionEnabled="True" />
+                        </Expander>
+
+                        <!-- Performance section — CPU + Memory sparklines. -->
+                        <Expander x:Name="flyoutPerformanceExpander"
+                                  Header="Performance"
+                                  IsExpanded="True"
+                                  Margin="0,4,0,0"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch">
+                        <StackPanel Spacing="4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="CPU" FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="1" x:Name="flyoutCpuChartLabel"
+                                           Text="-" FontSize="12" />
+                            </Grid>
+                            <Border x:Name="flyoutCpuChartBg"
+                                    Height="40"
+                                    CornerRadius="2"
+                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                                <Grid x:Name="flyoutCpuChart"
+                                      SizeChanged="OnChartSizeChanged" />
+                            </Border>
+
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Memory" FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="1" x:Name="flyoutMemoryChartLabel"
+                                           Text="-" FontSize="12" />
+                            </Grid>
+                            <Border x:Name="flyoutMemoryChartBg"
+                                    Height="40"
+                                    CornerRadius="2"
+                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                                <Grid x:Name="flyoutMemoryChart"
+                                      SizeChanged="OnChartSizeChanged" />
+                            </Border>
+                        </StackPanel>
+                        </Expander>
+
+                        <!-- Snapshots section. -->
+                        <Expander x:Name="flyoutSnapshotsExpander"
+                                  Header="Snapshots"
+                                  IsExpanded="True"
+                                  Margin="0,4,0,0"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch">
+                        <StackPanel Spacing="2">
+
+                        <!-- Empty-state text shown when there are no snapshots. -->
+                        <TextBlock x:Name="flyoutNoSnapshots"
+                                   Text="No snapshots."
+                                   FontSize="12"
+                                   Opacity="0.6"
+                                   Margin="0,2,0,0"
+                                   Visibility="Collapsed" />
+
+                        <!-- Right-click a snapshot for Apply / Rename / Delete /
+                             Delete subtree (context menu built in code-behind). -->
+                        <ListView x:Name="flyoutSnapshotList"
+                                  SelectionMode="Single"
+                                  SelectionChanged="OnSnapshotSelected"
+                                  Margin="0,2,0,0">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="MinHeight" Value="26" />
+                                    <Setter Property="Padding" Value="6,2" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                        </ListView>
+
+                        <!-- Bottom row: Take (left) + an inline "taking snapshot…"
+                             status to its right. Inline (not a banner above/below)
+                             so a snapshot op never shifts the list. -->
+                        <StackPanel Orientation="Horizontal" Spacing="8"
+                                    Margin="0,4,0,0" VerticalAlignment="Center">
+                            <Button x:Name="flyoutTakeSnapBtn"
+                                    Click="OnTakeSnapshotClick"
+                                    Padding="6,2"
+                                    FontSize="11"
+                                    ToolTipService.ToolTip="Take snapshot">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon FontFamily="Segoe MDL2 Assets"
+                                              Glyph="&#xE722;" FontSize="11" />
+                                    <TextBlock Text="Take" />
+                                </StackPanel>
+                            </Button>
+                            <StackPanel x:Name="flyoutSnapProgress"
+                                        Orientation="Horizontal" Spacing="6"
+                                        VerticalAlignment="Center"
+                                        Visibility="Collapsed">
+                                <ProgressRing x:Name="flyoutSnapProgressRing"
+                                              Width="14" Height="14"
+                                              IsActive="False"
+                                              VerticalAlignment="Center" />
+                                <TextBlock x:Name="flyoutSnapProgressText"
+                                           Text="Working…"
+                                           FontSize="12"
+                                           Opacity="0.8"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </StackPanel>
+                        </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

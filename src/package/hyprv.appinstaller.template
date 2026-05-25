@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  App Installer descriptor TEMPLATE. tools/make-msix.ps1 stamps the version, release
+  tag, and publisher into the placeholders below and writes dist/hyprv.appinstaller
+  (UTF-8, no BOM, ASCII only - App Installer rejects a BOM or non-ASCII characters).
+  The script fails the build if any placeholder is left unsubstituted.
+
+  ONE descriptor serves BOTH architectures via <MainBundle>: it points at a single
+  hyprv.msixbundle (x64 + ARM64) and App Installer installs the build matching the
+  user's CPU. (A descriptor can hold only one MainPackage/MainBundle, which is why
+  multi-arch requires a bundle rather than two loose .msix.)
+
+  This is a per-release VERSIONED manifest, not a static pointer: the installed app
+  re-fetches it from the stable root Uri (releases/latest/download = always the
+  newest one) and updates only when THIS file's root Version is higher. The
+  MainBundle Version must equal the bundle's version. Both bump every release (via
+  tools/set-version.ps1), so the version is a placeholder here, never hard-coded.
+-->
+<AppInstaller
+    xmlns="http://schemas.microsoft.com/appx/appinstaller/2021"
+    Version="{VERSION}"
+    Uri="https://github.com/jxy-s/hyprv/releases/latest/download/hyprv.appinstaller">
+
+  <MainBundle
+      Name="hyprv"
+      Publisher="{PUBLISHER}"
+      Version="{VERSION}"
+      Uri="https://github.com/jxy-s/hyprv/releases/download/{TAG}/hyprv.msixbundle" />
+
+  <!-- Windows App SDK runtime (framework package), one entry per architecture. App
+       Installer installs the one matching the device, only if a satisfying version
+       isn't already present - this auto-resolves the runtime and removes the
+       0xc000027b first-launch crash on clean machines. Name / Publisher / Version /
+       ProcessorArchitecture must match the hosted Microsoft.WindowsAppRuntime.2 msix. -->
+  <Dependencies>
+    <Package
+        Name="Microsoft.WindowsAppRuntime.2"
+        Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+        Version="2.1.3.0"
+        ProcessorArchitecture="x64"
+        Uri="https://github.com/jxy-s/hyprv/releases/download/{TAG}/Microsoft.WindowsAppRuntime.2-x64.msix" />
+    <Package
+        Name="Microsoft.WindowsAppRuntime.2"
+        Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+        Version="2.1.3.0"
+        ProcessorArchitecture="arm64"
+        Uri="https://github.com/jxy-s/hyprv/releases/download/{TAG}/Microsoft.WindowsAppRuntime.2-arm64.msix" />
+  </Dependencies>
+
+  <UpdateSettings>
+    <!-- Check on every launch + an 8-hour background check; forward-only, silent. -->
+    <OnLaunch HoursBetweenUpdateChecks="0" />
+    <AutomaticBackgroundTask />
+  </UpdateSettings>
+
+</AppInstaller>

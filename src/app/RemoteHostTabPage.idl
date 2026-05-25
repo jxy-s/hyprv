@@ -1,0 +1,14 @@
+namespace hyprv_app
+{
+    [default_interface]
+    runtimeclass RemoteHostTabPage : Microsoft.UI.Xaml.Controls.UserControl
+    {
+        RemoteHostTabPage();
+
+        // Bind this page to a saved remote host. address is the host's stable
+        // key (Settings::RemoteHost.address); the page resolves the full host
+        // record from Settings each time it connects so edits are picked up.
+        void Initialize(String address);
+        String HostAddress { get; };
+    }
+}

@@ -1,0 +1,64 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="hyprv"
+    Publisher="CN=John Shaw, O=John Shaw, L=Longmont, S=CO, C=US"
+    Version="1.0.0.1" />
+
+  <Properties>
+    <DisplayName>hyprv - Hyper-V Manager</DisplayName>
+    <PublisherDisplayName>jxy-s</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26226.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26226.0" />
+    <!-- Framework-dependent on the Windows App SDK 2.1 runtime. The .wapproj only
+         auto-declared VCLibs, not this, so it's declared explicitly. This is the
+         framework package that supplies the WinUI framework resources
+         (ms-appx:///Microsoft.UI.Xaml/...) + WinRT registrations. Testers must have
+         Microsoft.WindowsAppRuntime.2 >= 2.1.3.0 installed (the WindowsAppRuntime
+         redist). Identity verified from the installed framework package. -->
+    <PackageDependency Name="Microsoft.WindowsAppRuntime.2" MinVersion="2.1.3.0"
+                       Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-US"/>
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+      Executable="$targetnametoken$.exe"
+      EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="hyprv - Hyper-V Manager"
+        Description="hyprv - Hyper-V Manager"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- runFullTrust is REQUIRED and MINIMAL. hyprv is a full-trust Win32 app: it
+         spawns the hyprv-rdphost.exe child process (CreateProcess), manages Hyper-V
+         via WMI/COM, and owns the RDP popup window cross-process. None of those have
+         a narrow (sandboxed UWP) capability equivalent, so runFullTrust is the only
+         capability needed AND the only one that works. The installer's "Uses all
+         system resources" line is the OS's fixed disclosure for runFullTrust; it
+         cannot be narrowed or hidden without turning the app into a sandboxed
+         process that can't do any of the above. Do not add other capabilities. -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

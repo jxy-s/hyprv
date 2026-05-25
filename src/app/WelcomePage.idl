@@ -1,0 +1,12 @@
+namespace hyprv_app
+{
+    [default_interface]
+    runtimeclass WelcomePage : Microsoft.UI.Xaml.Controls.UserControl
+    {
+        // Constructed by MainWindow.OpenWelcomeTab; the impl exposes a
+        // non-IDL SetMainWindow setter for wiring the owning Window so
+        // tab tear-away can re-parent into a fresh Window without IDL
+        // breakage.
+        WelcomePage();
+    }
+}
