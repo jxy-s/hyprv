@@ -1,0 +1,13 @@
+namespace hyprv_app
+{
+    [default_interface]
+    runtimeclass NewVmDialog : Microsoft.UI.Xaml.Controls.ContentDialog
+    {
+        // The welcome-page "New VM..." wizard. Self-contained: it gathers the
+        // config, calls VMManager::CreateVM on Create, and exposes the new VM's
+        // GUID/name via non-IDL getters that MainWindow::OpenNewVmDialog reads
+        // after ShowAsync to open a tab. No projected surface beyond the ctor —
+        // kept out of IDL so the host wiring can evolve without ABI churn.
+        NewVmDialog();
+    }
+}

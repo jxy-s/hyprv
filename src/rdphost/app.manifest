@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="hyprv.rdphost"/>
+
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Win10+ compatibility GUID — same as the parent (src/app/app.manifest). -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+    </application>
+  </compatibility>
+
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <!-- MUST match the parent's PerMonitorV2 (src/app/app.manifest).
+           hyprv.exe owns + SetWindowPos-es this process's popup window across
+           the process boundary, feeding it PHYSICAL-pixel geometry and the
+           real monitor DPI (VmTabPage::ComputeBorderScreenRect uses
+           GetDpiForWindow; dpiScalePercent rides the wire). If this process
+           were DPI-unaware (the default with no manifest) the OS would
+           bitmap-virtualize the popup: GetWindowRect/SetWindowPos here would
+           run in virtualized 96-DPI coordinates while the PMv2 parent passes
+           physical ones, the two spaces diverge, and mstscax's framebuffer
+           renders small + corner-anchored inside a control sized in the other
+           space (the "RDP content tiny in the upper-left on a scaled display"
+           bug). Matching PerMonitorV2 puts both processes in one physical-pixel
+           coordinate space and lets mstscax read the true monitor DPI. -->
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>

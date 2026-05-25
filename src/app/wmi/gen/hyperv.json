@@ -1,0 +1,32 @@
+[
+    {
+        "path": "../generated/HyperV.h",
+        "namespace": "hyprv::wmi::hyperv",
+        "cim_namespace": "root\\virtualization\\v2",
+        "classes": [
+            "Msvm_VirtualSystemManagementService",
+            "Msvm_VirtualSystemSnapshotService",
+            "Msvm_ComputerSystem",
+            "Msvm_Keyboard",
+            "Msvm_VirtualSystemSettingData",
+            "Msvm_ConcreteJob",
+            "Msvm_SummaryInformation",
+            "Msvm_SecurityElement",
+            "Msvm_KvpExchangeComponent",
+            "Msvm_MemorySettingData",
+            "Msvm_GuestNetworkAdapterConfiguration",
+            "Msvm_SyntheticEthernetPortSettingData",
+            "Msvm_EthernetPortAllocationSettingData",
+            "Msvm_VirtualEthernetSwitch",
+            "Msvm_StorageAllocationSettingData",
+            "Msvm_ProcessorSettingData",
+            "Msvm_VirtualHardDiskSettingData",
+            "Msvm_HeartbeatComponentSettingData",
+            "Msvm_KvpExchangeComponentSettingData",
+            "Msvm_ShutdownComponentSettingData",
+            "Msvm_TimeSyncComponentSettingData",
+            "Msvm_VssComponentSettingData",
+            "Msvm_GuestServiceInterfaceComponentSettingData"
+        ]
+    }
+]

@@ -1,0 +1,531 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="hyprv_app.WelcomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:hyprv_app"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    HorizontalContentAlignment="Stretch"
+    VerticalContentAlignment="Stretch">
+
+    <!--
+        Welcome / start page. Default tab on first launch + what '+'
+        creates. Designed for the same tight density as the rail / flyout
+        (~26 DIP rows, 12pt body) — see [[hyprv-ui-density]] for the
+        density rules this page follows.
+
+        Layout: edge-to-edge fill (NO MaxWidth — the tab content area
+        already changes width with the rail/flyout splitters; clamping
+        to a fixed inner width here caused left-aligned dead space and
+        clipping on narrow viewports). A horizontal ScrollViewer wraps
+        the table so narrow widths reveal columns via scroll instead of
+        chopping them off.
+
+        Recents are compact pills; All-VMs is a Manager-tab-style table.
+        Rows require a DOUBLE-click to open (matches the rail's gesture
+        — single-click should never accidentally tear a user away from
+        the welcome screen mid-scroll).
+    -->
+    <UserControl.Resources>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="CharacterSpacing" Value="40" />
+        </Style>
+
+        <!-- "Subtle" button: transparent chrome that lights up on hover.
+             Less visual weight than the default Button style, which has
+             a permanent fill + border that competes with body content. -->
+        <Style x:Key="SubtleButton" TargetType="Button">
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="UseSystemFocusVisuals" Value="False" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        </Style>
+    </UserControl.Resources>
+
+    <!--
+        Outer Grid is the click-away target: a tap on any blank area
+        yields keyboard focus from the search box / row selection.
+        Background must be set (Transparent counts) for the hit-test
+        to fire; without it the Tapped event only routes through
+        explicit children.
+
+        KeyDown on the page root drives arrow-key row navigation and
+        Enter-to-open. The handler skips when the search box owns focus
+        so typing in the filter doesn't double-act.
+    -->
+    <!-- Background="Transparent" (not ApplicationPageBackgroundThemeBrush)
+         — that brush is RGB ~32,32,32 in dark theme, which leaves the
+         welcome tab lighter than other tabs in Black mode. Transparent
+         lets the window's rootGrid (and SystemBackdrop in non-Black
+         themes) show through, keeping all tabs consistent. Explicit
+         Transparent (rather than no value at all) is still required so
+         Tapped / KeyDown handlers on the empty page area register
+         hits — null Background is not hit-testable. -->
+    <Grid Background="Transparent"
+          IsTabStop="True"
+          Tapped="OnPageTapped"
+          KeyDown="OnPageKeyDown">
+        <!--
+            The page chrome is visible IMMEDIATELY on launch — only the ALL VMs
+            table waits on the first VM poll (an inline spinner lives inside
+            allVmsSection, scoped to just that section). Recents + Remote Hosts
+            come from Settings, not the VM poll, so they're usable right away
+            instead of being hidden behind a full-page "Loading VMs…" overlay.
+        -->
+        <ScrollViewer x:Name="welcomeScrollViewer"
+                      HorizontalScrollMode="Disabled"
+                      HorizontalScrollBarVisibility="Disabled">
+            <!-- Outer column fills the tab content area. Inner padding
+                 keeps content off the splitter edges. NO MaxWidth — the
+                 user's window/rail/flyout sizing already shapes the
+                 available width. -->
+            <StackPanel Padding="12,10,12,12"
+                        Spacing="10"
+                        HorizontalAlignment="Stretch">
+
+                <!-- Top action bar: search on the right. The "New VM" and
+                     "Add remote host" create actions live in their own section
+                     headers (ALL VMs / REMOTE HOSTS) below — each section owns
+                     its add affordance, right-aligned + symmetric. -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Search "pill": rounded border + glyph + transparent
+                         TextBox. Matches the rail's minimalist chrome —
+                         no thick accent underline, no fill. The Border
+                         itself is the visual shell; the TextBox provides
+                         only input behavior. No placeholder text — the
+                         magnifying glass already says what it does. -->
+                    <Border Grid.Column="2"
+                            x:Name="searchPill"
+                            Width="220"
+                            Height="26"
+                            CornerRadius="13"
+                            Padding="10,0,10,0"
+                            BorderThickness="1"
+                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                            Background="{ThemeResource ControlFillColorTransparentBrush}">
+                        <Grid VerticalAlignment="Stretch">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Grid.Column="0"
+                                      FontFamily="Segoe MDL2 Assets"
+                                      Glyph="&#xE721;"
+                                      FontSize="11"
+                                      Margin="0,0,8,0"
+                                      Opacity="0.6"
+                                      VerticalAlignment="Center" />
+                            <!--
+                                Stripped-down TextBox so it sits flush in
+                                the pill. Two distinct concerns to mute:
+
+                                1) The internal ContentPresenter padding
+                                   (TextControlThemePadding, default
+                                   ~12,5,6,5). Plain Padding=0 on the
+                                   TextBox doesn't reach it — we have to
+                                   override the resource key. Setting it
+                                   to 0,3,0,3 gives the text just enough
+                                   vertical breathing room that
+                                   VerticalContentAlignment=Center can
+                                   actually center the baseline inside
+                                   the 26 DIP pill (a flat 0 collapsed
+                                   the ScrollViewer to the text height
+                                   so there was nowhere to center).
+
+                                2) The focus / hover / disabled state
+                                   brushes (TextControlBackgroundFocused
+                                   etc). Defaults paint a fill behind the
+                                   text the moment the box gets focus —
+                                   visible as a "square inside the pill".
+                                   All four state brushes get pinned to
+                                   transparent so the pill border stays
+                                   the only visual chrome. Border-brush
+                                   states get the same treatment to kill
+                                   the underline that WinUI draws on
+                                   focused TextBoxes by default.
+                            -->
+                            <!-- Padding is set DIRECTLY on the TextBox
+                                 (not via the TextControlThemePadding
+                                 resource) because the default template
+                                 binds the inner ContentElement's padding
+                                 to {TemplateBinding Padding} — so the
+                                 TextBox's own Padding wins, and a 0
+                                 there silently overrides any resource
+                                 override. Asymmetric 0,6,0,0 pushes the
+                                 line down so it sits on the same
+                                 baseline as the magnifying-glass and
+                                 delete-X glyphs. -->
+                            <TextBox Grid.Column="1"
+                                     x:Name="filterBox"
+                                     FontSize="12"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     Padding="0,3,0,0"
+                                     Margin="0"
+                                     MinHeight="0"
+                                     VerticalAlignment="Center"
+                                     TextChanged="OnFilterTextChanged">
+                                <TextBox.Resources>
+                                    <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+                                    <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                                    <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                                </TextBox.Resources>
+                            </TextBox>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- Recents section. Hidden entirely when empty — saves
+                     vertical space on a fresh install. -->
+                <StackPanel x:Name="recentsSection" Spacing="4">
+                    <TextBlock Text="RECENT" Style="{StaticResource SectionTitle}" />
+                    <ScrollViewer HorizontalScrollMode="Auto"
+                                  HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollMode="Disabled"
+                                  VerticalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="recentsHost"
+                                    Orientation="Horizontal"
+                                    Spacing="6" />
+                    </ScrollViewer>
+                </StackPanel>
+
+                <!-- All VMs table. Header + body share column widths via
+                     a shared Grid pattern (re-declared in BuildVmRow).
+                     Horizontal scroll lets narrow viewports reveal the
+                     full row instead of clipping the right edge. -->
+                <StackPanel x:Name="allVmsSection" Spacing="4">
+                    <!-- Section title row: title left, "New VM" create action
+                         right (symmetric with the REMOTE HOSTS header below).
+                         The cold-start loading indicator (allVmsLoading) sits
+                         inline below this header — scoped to the VM table only. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="ALL VMs"
+                                   Style="{StaticResource SectionTitle}"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" x:Name="newVmBtn"
+                                Click="OnNewVmClick"
+                                FontSize="12" Padding="8,2,8,2"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTipService.ToolTip="Create a new virtual machine">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon FontFamily="Segoe MDL2 Assets"
+                                          Glyph="&#xE710;" FontSize="12" />
+                                <TextBlock Text="New VM" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!-- Cold-start loading state — scoped to THIS section only.
+                         Shown until the first non-empty VM snapshot, then
+                         collapsed forever (later empty results are real, not
+                         "still loading"). The table below is collapsed while
+                         this shows. Recents + Remote Hosts stay usable. -->
+                    <StackPanel x:Name="allVmsLoading"
+                                Orientation="Vertical"
+                                HorizontalAlignment="Center"
+                                MinHeight="120"
+                                VerticalAlignment="Center"
+                                Spacing="12"
+                                Padding="0,24,0,12">
+                        <ProgressRing IsActive="True"
+                                      Width="36" Height="36"
+                                      HorizontalAlignment="Center" />
+                        <TextBlock Text="Loading VMs..."
+                                   FontSize="13"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+
+                    <!-- Hyper-V connection error (not installed / no access).
+                         Replaces the loading spinner + table when VMManager can't
+                         reach root\virtualization\v2. Recents + Remote Hosts stay
+                         usable — they don't need Hyper-V. Retry re-attempts. -->
+                    <StackPanel x:Name="allVmsError"
+                                Orientation="Vertical"
+                                HorizontalAlignment="Center"
+                                MaxWidth="440"
+                                MinHeight="120"
+                                VerticalAlignment="Center"
+                                Spacing="12"
+                                Padding="0,24,0,12"
+                                Visibility="Collapsed">
+                        <FontIcon FontFamily="Segoe MDL2 Assets"
+                                  Glyph="&#xE7BA;"
+                                  FontSize="28"
+                                  HorizontalAlignment="Center"
+                                  Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                        <TextBlock x:Name="allVmsErrorText"
+                                   FontSize="13"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Button x:Name="retryConnectBtn"
+                                Content="Retry"
+                                Click="OnRetryConnectClick"
+                                HorizontalAlignment="Center"
+                                FontSize="12"
+                                Padding="16,4,16,4" />
+                    </StackPanel>
+
+                    <ScrollViewer x:Name="allVmsTable"
+                                  Visibility="Collapsed"
+                                  HorizontalScrollMode="Auto"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollMode="Disabled"
+                                  VerticalScrollBarVisibility="Disabled">
+                        <StackPanel Spacing="0" MinWidth="560">
+                            <!--
+                                Sortable column headers. Each cell is a
+                                clickable Border with Tag carrying the
+                                sort-key int (matches the SortKey enum in
+                                WelcomePage.xaml.cpp). A shared
+                                OnSortHeaderTapped handler reads Tag and
+                                toggles direction. Sort arrow lives in a
+                                FontIcon next to the label and is updated
+                                in code-behind via UpdateSortIndicators.
+
+                                Header column widths MUST match the data
+                                row column widths in BuildVmRow — they're
+                                independent Grids so any change to one
+                                requires the matching change to the other.
+                            -->
+                            <Border BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="0,0,0,2">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="14" />
+                                        <ColumnDefinition Width="*"   MinWidth="180" />
+                                        <ColumnDefinition Width="100" />
+                                        <ColumnDefinition Width="60"  />
+                                        <ColumnDefinition Width="100" />
+                                        <ColumnDefinition Width="100" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="1"
+                                            Tag="0"
+                                            Padding="0,3,8,3"
+                                            CornerRadius="3"
+                                            Background="Transparent"
+                                            Tapped="OnSortHeaderTapped">
+                                        <StackPanel Orientation="Horizontal" Spacing="3">
+                                            <TextBlock Text="Name" FontSize="11"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <FontIcon x:Name="sortArrowName"
+                                                      FontFamily="Segoe MDL2 Assets"
+                                                      Glyph="&#xE74A;" FontSize="9"
+                                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                      VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="2"
+                                            Tag="1"
+                                            Padding="0,3,8,3"
+                                            CornerRadius="3"
+                                            Background="Transparent"
+                                            Tapped="OnSortHeaderTapped">
+                                        <StackPanel Orientation="Horizontal" Spacing="3">
+                                            <TextBlock Text="Status" FontSize="11"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <FontIcon x:Name="sortArrowStatus"
+                                                      FontFamily="Segoe MDL2 Assets"
+                                                      Glyph="&#xE74A;" FontSize="9"
+                                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                      VerticalAlignment="Center"
+                                                      Visibility="Collapsed" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="3"
+                                            Tag="2"
+                                            Padding="0,3,8,3"
+                                            CornerRadius="3"
+                                            Background="Transparent"
+                                            Tapped="OnSortHeaderTapped">
+                                        <StackPanel Orientation="Horizontal" Spacing="3"
+                                                    HorizontalAlignment="Right">
+                                            <TextBlock Text="CPU" FontSize="11"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <FontIcon x:Name="sortArrowCpu"
+                                                      FontFamily="Segoe MDL2 Assets"
+                                                      Glyph="&#xE74A;" FontSize="9"
+                                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                      VerticalAlignment="Center"
+                                                      Visibility="Collapsed" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="4"
+                                            Tag="3"
+                                            Padding="0,3,8,3"
+                                            CornerRadius="3"
+                                            Background="Transparent"
+                                            Tapped="OnSortHeaderTapped">
+                                        <StackPanel Orientation="Horizontal" Spacing="3"
+                                                    HorizontalAlignment="Right">
+                                            <TextBlock Text="Memory" FontSize="11"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <FontIcon x:Name="sortArrowMemory"
+                                                      FontFamily="Segoe MDL2 Assets"
+                                                      Glyph="&#xE74A;" FontSize="9"
+                                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                      VerticalAlignment="Center"
+                                                      Visibility="Collapsed" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="5"
+                                            Tag="4"
+                                            Padding="0,3,8,3"
+                                            CornerRadius="3"
+                                            Background="Transparent"
+                                            Tapped="OnSortHeaderTapped">
+                                        <StackPanel Orientation="Horizontal" Spacing="3">
+                                            <TextBlock Text="Uptime" FontSize="11"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <FontIcon x:Name="sortArrowUptime"
+                                                      FontFamily="Segoe MDL2 Assets"
+                                                      Glyph="&#xE74A;" FontSize="9"
+                                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                      VerticalAlignment="Center"
+                                                      Visibility="Collapsed" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <!-- Per-VM rows appended by RenderAllVms. -->
+                            <StackPanel x:Name="allVmsHost" Spacing="0" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <TextBlock x:Name="allVmsEmptyHint"
+                               Text="No VMs match your filter."
+                               FontSize="12"
+                               Margin="0,4,0,0"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               Visibility="Collapsed" />
+                </StackPanel>
+
+                <!-- Remote Hosts section — sits below ALL VMs (the local host's
+                     VMs are the primary content; remote machines are secondary).
+                     Always visible (unlike Recents) so the "Add" affordance is
+                     reachable even with zero saved hosts. Rows built in
+                     RenderRemoteHosts; DOUBLE-click a row to connect, right-click
+                     for Connect / Edit / Forget. Sortable Name / Address columns
+                     mirror the ALL VMs table above. -->
+                <StackPanel x:Name="remoteHostsSection" Spacing="4">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="REMOTE HOSTS"
+                                   Style="{StaticResource SectionTitle}"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" x:Name="addRemoteHostBtn"
+                                Click="OnAddRemoteHostClick"
+                                FontSize="12" Padding="8,2,8,2"
+                                Background="Transparent" BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon FontFamily="Segoe MDL2 Assets"
+                                          Glyph="&#xE710;" FontSize="12" />
+                                <TextBlock Text="Add remote host" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!-- Sortable column headers. Column widths MUST match the
+                         body rows built in BuildRemoteHostRow: [16 glyph][Name
+                         *][Address *]. Each header Border's Tag = RemoteSortKey
+                         int. Hidden when there are no saved hosts. -->
+                    <Border x:Name="remoteHostsHeader"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="0,0,0,2"
+                            Visibility="Collapsed">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" MinWidth="180" />
+                                <ColumnDefinition Width="320" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="1" Tag="0"
+                                    Padding="0,3,8,3" CornerRadius="3"
+                                    Background="Transparent"
+                                    Tapped="OnRemoteSortHeaderTapped">
+                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                    <TextBlock Text="Name" FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <FontIcon x:Name="sortArrowRemoteName"
+                                              FontFamily="Segoe MDL2 Assets"
+                                              Glyph="&#xE70E;" FontSize="9"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                              VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="2" Tag="1"
+                                    Padding="0,3,8,3" CornerRadius="3"
+                                    Background="Transparent"
+                                    Tapped="OnRemoteSortHeaderTapped">
+                                <!-- Right-aligned secondary column, matching the
+                                     ALL VMs non-name columns (Name stretches;
+                                     secondary columns cluster at the right). -->
+                                <StackPanel Orientation="Horizontal" Spacing="3"
+                                            HorizontalAlignment="Right">
+                                    <TextBlock Text="Address" FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <FontIcon x:Name="sortArrowRemoteAddress"
+                                              FontFamily="Segoe MDL2 Assets"
+                                              Glyph="&#xE70E;" FontSize="9"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                              VerticalAlignment="Center"
+                                              Visibility="Collapsed" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- One row per saved host (BuildRemoteHostRow), like the
+                         ALL VMs list above. -->
+                    <StackPanel x:Name="remoteHostsHost" Spacing="0" />
+                    <TextBlock x:Name="remoteHostsEmptyHint"
+                               Text="No saved hosts yet. Add a machine to connect to it over RDP."
+                               FontSize="11"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               Visibility="Collapsed" />
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+
+</UserControl>

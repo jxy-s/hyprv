@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="hyprv_app.RemoteHostTabPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:hyprv_app"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    HorizontalContentAlignment="Stretch"
+    VerticalContentAlignment="Stretch">
+
+    <!--
+        Per-remote-host tab content. Same two-layer shape as VmTabPage:
+          rdpHost   — anchor Border for the cross-process mstscax popup
+                      (a top-level Win32 window owned by hyprv's HWND, painted
+                      over this Border by code-behind). Transparent so the
+                      placeholder shows through when the popup is hidden.
+          placeholderRoot — shown when the session isn't live (connecting,
+                      disconnected, or a connect error). Host name + status +
+                      a single Connect / Reconnect / Retry action button.
+
+        No VM-state machinery here (a remote host has no power state); the page
+        connects on load and lets the user re-establish via the action button.
+    -->
+    <Grid>
+        <Border x:Name="rdpHost" Background="Transparent" />
+
+        <Grid x:Name="placeholderRoot"
+              Visibility="Collapsed"
+              Background="Transparent">
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="6"
+                        MaxWidth="500"
+                        Padding="24">
+                <FontIcon x:Name="placeholderGlyph"
+                          FontFamily="Segoe MDL2 Assets"
+                          Glyph="&#xE968;"
+                          FontSize="32"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,4"
+                          Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="placeholderHostName"
+                           FontSize="28"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap" />
+                <TextBlock x:Name="placeholderState"
+                           FontSize="14"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="placeholderHint"
+                           FontSize="12"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           Margin="0,12,0,0"
+                           Visibility="Collapsed"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                <ProgressRing x:Name="placeholderProgress"
+                              IsActive="False"
+                              Width="28" Height="28"
+                              Margin="0,12,0,0"
+                              HorizontalAlignment="Center"
+                              Visibility="Collapsed" />
+                <Button x:Name="placeholderAction"
+                        Click="OnPlaceholderActionClick"
+                        HorizontalAlignment="Center"
+                        Margin="0,8,0,0"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon x:Name="placeholderActionGlyph"
+                                  FontFamily="Segoe MDL2 Assets"
+                                  Glyph="&#xE968;" FontSize="14" />
+                        <TextBlock x:Name="placeholderActionText" Text="Connect" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Grid>
+
+</UserControl>

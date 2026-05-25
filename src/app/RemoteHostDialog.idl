@@ -1,0 +1,18 @@
+namespace hyprv_app
+{
+    [default_interface]
+    runtimeclass RemoteHostDialog : Microsoft.UI.Xaml.Controls.ContentDialog
+    {
+        RemoteHostDialog();
+
+        // Pre-fill for editing an existing saved host (by address key). Pass an
+        // empty string to add a new host. Call right after construction, before
+        // ShowAsync.
+        void InitializeForEdit(String address);
+
+        // After ShowAsync returns Primary, the address of the host that was
+        // saved (the opener uses it to open / refresh a tab). Empty if the
+        // dialog was cancelled.
+        String SavedAddress { get; };
+    }
+}

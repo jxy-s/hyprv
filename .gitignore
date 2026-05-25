@@ -1,0 +1,46 @@
+# ---- MSBuild / VS build output ----
+# bin/ sits at the repo root (next to src/) — final exe + pdb + winmd land here.
+# obj/ sits inside src/ — intermediate per-project files (.pch, .obj, generated headers, etc.).
+bin/
+src/obj/
+# dist/ — packaged distribution output (self-contained ZIP / staging), generated.
+dist/
+# Belt-and-braces in case any project ever emits to its own dir:
+x64/
+x86/
+ARM64/
+Win32/
+Debug/
+Release/
+
+# ---- VS / Intellisense state ----
+.vs/
+*.vcxproj.user
+*.user
+*.suo
+*.aps
+*.opensdf
+*.sdf
+*.tlog
+
+# ---- NuGet ----
+packages/
+
+# ---- WinUI XAML codegen + AppX intermediate ----
+Generated Files/
+
+# ---- Build artifacts ----
+*.exp
+*.pdb
+*.idb
+*.ilk
+*.lib
+*.recipe
+*.ipdb
+*.iobj
+*.obj
+*.winmd.lastbuild
+
+# ---- App-local logs / settings (in case a dev runs out of the repo) ----
+*.log
+settings.json

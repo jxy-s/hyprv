@@ -1,0 +1,13 @@
+namespace hyprv_app
+{
+    [default_interface]
+    runtimeclass VmSettingsDialog : Microsoft.UI.Xaml.Controls.ContentDialog
+    {
+        // Constructed by the "Edit hardware..." context-menu handler. The
+        // impl exposes a non-IDL Initialize(guid) setter for binding the
+        // VM after construction — kept out of the projection so future
+        // editor variants (e.g. an editor parameterized by a remote-host
+        // scope) can re-wire without IDL/ABI churn.
+        VmSettingsDialog();
+    }
+}

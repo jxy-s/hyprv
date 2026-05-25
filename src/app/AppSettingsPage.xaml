@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="hyprv_app.AppSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:hyprv_app"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        Tab-page settings. Layout inspired by VS Code's Settings tab:
+          Row 0 — top action bar with the search pill (positioned + styled
+                  to match the welcome page so the two tab types feel
+                  related).
+          Row 1 — two columns. Left = section nav (ListView of category
+                  names). Right = ScrollViewer of all sections, end-to-end,
+                  built in code-behind. Clicking a nav item scrolls the
+                  right pane to that section; the right pane is always
+                  fully populated so the user can scan / scroll freely.
+
+        Instant-apply: every toggle writes through to Settings on Toggled.
+        Search filters rows + collapses empty sections + hides empty nav
+        items so the left list stays honest about what's reachable.
+    -->
+
+    <UserControl.Resources>
+        <Style x:Key="NavListItem" TargetType="ListViewItem">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="12,4,12,4" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <!-- Theme-aware text styles live in App.xaml so code-built UI
+             in BuildSections can look them up via
+             Application.Current.Resources without needing the page's
+             FrameworkElement context. -->
+    </UserControl.Resources>
+
+    <Grid Padding="0">
+        <Grid.RowDefinitions>
+            <!--
+                Row order matters here. The top action bar (with the search
+                pill) MUST be Row 0 so its Y is stable across tab switches.
+                The welcome page's search pill is the first child of a
+                StackPanel with Padding="12,10,...", landing at Y≈10 DIPs.
+                Matching that Y in AppSettingsPage requires the search bar
+                to sit directly under the page's top edge, NOT below a
+                conditional banner whose collapsed/expanded state would
+                shift the search bar vertically by ~60 DIPs whenever the
+                user changes an appearance setting. We park the
+                restart-required banner in Row 1 (BELOW the search bar)
+                instead — it now only pushes the form content downward,
+                never the search bar.
+            -->
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--
+            Top action bar — same shape as WelcomePage's. Outer padding
+            matches WelcomePage's (12,10,12,12 → 12,10,12,8 here since
+            the section nav below has its own top padding). Left column
+            is empty for now; future "Reset all" / "Import / Export"
+            actions could land there. Search pill is fixed-width and
+            right-aligned.
+        -->
+        <Grid Grid.Row="0" Padding="12,10,12,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Search pill — width and styling match WelcomePage's so
+                 switching between the two tab types doesn't visually
+                 shift the control. Resources block zeros the TextBox's
+                 internal TextControlThemePadding (~12,6 by default) so
+                 the text actually centers inside the pill instead of
+                 sitting above the baseline of the delete-X glyph. -->
+            <Border Grid.Column="2"
+                    x:Name="searchPill"
+                    Width="220"
+                    Height="26"
+                    CornerRadius="13"
+                    Padding="10,0,10,0"
+                    BorderThickness="1"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    Background="{ThemeResource ControlFillColorTransparentBrush}">
+                <Grid VerticalAlignment="Stretch">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Grid.Column="0"
+                              FontFamily="Segoe MDL2 Assets"
+                              Glyph="&#xE721;"
+                              FontSize="11"
+                              Margin="0,0,8,0"
+                              Opacity="0.6"
+                              VerticalAlignment="Center" />
+                    <!-- See WelcomePage.xaml for the rationale on this
+                         resources block — it mutes the TextBox's focus /
+                         hover state brushes (which otherwise paint a
+                         visible square inside the pill) and gives the
+                         content presenter just enough vertical room
+                         (TextControlThemePadding = 0,3,0,3) that
+                         VerticalContentAlignment=Center can actually
+                         center the text baseline. -->
+                    <!-- See WelcomePage for the rationale on direct
+                         Padding="0,6,0,0" — the TextBox's own Padding
+                         beats any TextControlThemePadding override, so
+                         set it here rather than in resources. -->
+                    <TextBox Grid.Column="1"
+                             x:Name="searchBox"
+                             FontSize="12"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             Padding="0,3,0,0"
+                             Margin="0"
+                             MinHeight="0"
+                             VerticalAlignment="Center"
+                             TextChanged="OnSearchTextChanged">
+                        <TextBox.Resources>
+                            <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+                            <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                            <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                        </TextBox.Resources>
+                    </TextBox>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!--
+            Restart-required banner. Sits in Row 1, BELOW the action bar
+            (which owns Row 0) — see the row-order comment above. When
+            armed (IsOpen=True) it expands and only displaces the form
+            below it; the search pill above stays put, so tab-switching
+            between Settings (armed banner) and Welcome doesn't visibly
+            shift the search box. InfoBar collapses to 0 height when
+            IsOpen=False, leaving Row 1 invisible.
+        -->
+        <InfoBar x:Name="restartBanner"
+                 Grid.Row="1"
+                 Severity="Informational"
+                 IsClosable="False"
+                 IsOpen="False"
+                 Title="Restart required"
+                 Message="Some changes won't fully take effect until hyprv is restarted."
+                 Margin="12,0,12,8">
+            <InfoBar.ActionButton>
+                <Button Content="Restart now" Click="OnRestartNowClick" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
+        <!--
+            Two-column content area. Left fixed width (~200 DIP) for
+            comfortable category names; right takes the rest with internal
+            padding so the form doesn't stick to the divider. Section
+            divider is a 1 DIP left border on the right column.
+        -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left nav. Items are appended in code-behind, one per
+                 section built by BuildSections; selection drives a
+                 scroll-to-section on the right pane. -->
+            <Border Grid.Column="0"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,1,0">
+                <ListView x:Name="navList"
+                          SelectionMode="Single"
+                          SelectionChanged="OnNavSelectionChanged"
+                          ItemContainerStyle="{StaticResource NavListItem}"
+                          Padding="0,8,0,8" />
+            </Border>
+
+            <!-- Right scrollable form. formHost is the StackPanel that
+                 code-behind appends section headers + rows into. The
+                 ScrollViewer is referenced by name so code-behind can
+                 ChangeView to a section's vertical offset on nav click. -->
+            <ScrollViewer x:Name="contentScroller"
+                          Grid.Column="1"
+                          VerticalScrollMode="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollMode="Disabled"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="24,12,24,24">
+                <StackPanel x:Name="formHost"
+                            HorizontalAlignment="Stretch"
+                            Spacing="0">
+                    <TextBlock x:Name="noResultsText"
+                               Text="No settings match your search."
+                               FontSize="12"
+                               Margin="0,16,0,0"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Visibility="Collapsed" />
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,13 @@
+namespace hyprv_app
+{
+    [default_interface]
+    runtimeclass AppSettingsPage : Microsoft.UI.Xaml.Controls.UserControl
+    {
+        // Application settings as a tab page. UserControl (not ContentDialog)
+        // so the user can keep it open while testing changes — every toggle
+        // applies instantly, no Save button. Constructed by
+        // MainWindow.OpenAppSettingsTab (deduped: focuses an existing tab
+        // if one is open).
+        AppSettingsPage();
+    }
+}

@@ -1,0 +1,16 @@
+namespace hyprv_app
+{
+    [default_interface]
+    runtimeclass VmTabPage : Microsoft.UI.Xaml.Controls.UserControl
+    {
+        VmTabPage();
+
+        // Initialise the page for a specific VM. Constructor stays default
+        // (WinRT runtime classes don't get to choose their ctor signature);
+        // Initialize is called right after construction by MainWindow.
+        // vmGuid is the Msvm_ComputerSystem.Name (lower- or upper-case both
+        // accepted — comparisons elsewhere are case-insensitive).
+        void Initialize(String vmGuid);
+        String VmGuid { get; };
+    }
+}
