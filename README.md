@@ -8,7 +8,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Download hyprv](https://img.shields.io/badge/Download-hyprv-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/jxy-s/hyprv/releases/latest/download/hyprv.appinstaller)
-[![Built with Claude](https://img.shields.io/badge/built%20with-Claud-D97757?style=for-the-badge)](https://claude.com/product/claude-code)
+[![Built with Claude](https://img.shields.io/badge/built%20with-Claude-D97757?style=for-the-badge)](https://claude.com/product/claude-code)
 
 </div>
 
