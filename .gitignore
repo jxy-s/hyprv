@@ -13,6 +13,14 @@ Win32/
 Debug/
 Release/
 
+# The build-output patterns above (Debug/, Release/, x64/, …) are case-insensitive
+# on Windows and would otherwise swallow hand-authored config dirs like
+# `.claude/skills/release/`. `.claude/` is all tracked config — always include it.
+!.claude/
+!.claude/**
+# …except per-machine local settings, which stay untracked.
+.claude/settings.local.json
+
 # ---- VS / Intellisense state ----
 .vs/
 *.vcxproj.user
