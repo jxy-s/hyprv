@@ -5,7 +5,7 @@ description: Sub-area file-scoping for running multiple agents in parallel on th
 
 # Multi-agent guidance
 
-If running multiple agents in parallel on this repo, give each a clearly scoped sub-area to avoid stepping on each other. (The canonical "concern → file" map is the *Hot files* table in `CLAUDE.md`; the list below is the parallel-work scoping on top of it.)
+If running multiple agents in parallel on this repo, give each a clearly scoped sub-area to avoid stepping on each other. (The canonical "concern → file" map lives in the per-subtree `CLAUDE.md` files — start at `src/CLAUDE.md`'s area index → `src/app/CLAUDE.md` etc.; the list below is the parallel-work scoping on top of it.)
 
 - **Rail / VM list / context menu**: `MainWindow.xaml.cpp` lines that touch `RenderRail` / `CreateRailItem` + `src/app/ui/VmTileFactory.cpp` `BuildVmContextMenu`.
 - **Info flyout**: `MainWindow.xaml.cpp` `UpdateInfoFlyout*` / `ResetFlyoutSections`.
