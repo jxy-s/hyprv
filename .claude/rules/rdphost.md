@@ -1,3 +1,8 @@
+---
+paths:
+  - "src/rdphost/**"
+---
+
 # src/rdphost/ — IPC server / mstscax host (child process)
 
 **Trap zone.** Read the rdphost/mstscax/IPC section of `docs/GOTCHAS.md` first; wire-protocol reference is `docs/IPC.md`. **Any change to `src/shared/RdpIpc.h` must be coordinated through a single agent — both this process and `src/app/` need a matching update.**

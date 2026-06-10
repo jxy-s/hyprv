@@ -1,3 +1,8 @@
+---
+paths:
+  - "src/app/settings/**"
+---
+
 # src/app/settings/ — persisted prefs + log path
 
 | Concern | File(s) |

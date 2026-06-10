@@ -1,6 +1,11 @@
+---
+paths:
+  - "src/app/**"
+---
+
 # src/app/ — app/UI hot files
 
-Canonical "concern → file" map for the WinUI 3 app. Conventions + naming live in `src/CLAUDE.md`; gotcha detail in `docs/GOTCHAS.md`. Tab tear-away / multi-window / WMI / IPC are trap zones — read the matching `docs/GOTCHAS.md` section first.
+Canonical "concern → file" map for the WinUI 3 app. Conventions + naming live in `.claude/rules/src-conventions.md`; gotcha detail in `docs/GOTCHAS.md`. Tab tear-away / multi-window / WMI / IPC are trap zones — read the matching `docs/GOTCHAS.md` section first.
 
 | Concern | File(s) |
 |---------|---------|

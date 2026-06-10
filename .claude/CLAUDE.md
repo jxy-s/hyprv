@@ -1,6 +1,6 @@
 # hyprv — Claude project briefing
 
-Read this before touching anything. It's deliberately small: src-specific navigation and conventions live in nested `CLAUDE.md` files that load lazily when you open those subtrees (`src/CLAUDE.md` is the area index). Deep detail lives in `docs/`; recipes live in skills.
+Read this before touching anything. It's deliberately small: src-specific navigation and conventions live in path-scoped rules under `.claude/rules/` that load lazily when you open the matching subtree (`.claude/rules/src-conventions.md` is the area index). Deep detail lives in `docs/`; recipes live in skills.
 
 ## What hyprv is
 
@@ -11,7 +11,7 @@ A Hyper-V VM client for Windows. C++/WinRT + WinUI 3. From-scratch rewrite of th
 
 ## Repository layout
 
-All C++ source is under `src/`: `src/app/` = main WinUI 3 app (`hyprv.exe`); `src/rdphost/` = out-of-process mstscax host (`hyprv-rdphost.exe`); `src/shared/RdpIpc.h` = the IPC wire contract shared by both. Intermediates → `src/obj/`, final binaries → `bin/` (both gitignored). For where a concern lives, see `src/CLAUDE.md` (area index) → the per-subtree files, and the `multi-agent` skill for parallel-work scoping.
+All C++ source is under `src/`: `src/app/` = main WinUI 3 app (`hyprv.exe`); `src/rdphost/` = out-of-process mstscax host (`hyprv-rdphost.exe`); `src/shared/RdpIpc.h` = the IPC wire contract shared by both. Intermediates → `src/obj/`, final binaries → `bin/` (both gitignored). For where a concern lives, see `.claude/rules/src-conventions.md` (area index) → the per-area rules, and the `multi-agent` skill for parallel-work scoping.
 
 ## Build / release
 
@@ -22,11 +22,11 @@ Build + validate via the `build` and `verify` skills (VS 2026 DevShell + `msbuil
 **`docs/GOTCHAS.md` is the single source of truth** for every subtle, expensive-to-rediscover invariant (rdphost/mstscax/IPC, WMI, tab tear-away, theme, MSIX, naming, …), grouped by area and numbered.
 
 1. **Consult — ALWAYS.** Before touching any known-trap area (WMI `Modify*`/`Add*`, mstscax/RDP options, the rdphost popup or IPC wire format, tab drag/tear-away, multi-window, backdrop/theme chrome, ContentDialog/coroutine lifetime, boot order, storage/NIC/security/snapshot/serial-port edits, VM creation, MSIX packaging), read the matching `docs/GOTCHAS.md` section FIRST. It's also the first place to look for any "saves fine but nothing happens" silent-no-op.
-2. **Record — ALWAYS into `docs/GOTCHAS.md`, NEVER here.** New invariant → next number in the right area section (and inline at the code site). Keep CLAUDE.md files free of gotcha detail.
+2. **Record — ALWAYS into `docs/GOTCHAS.md`, NEVER here.** New invariant → next number in the right area section (and inline at the code site). Keep CLAUDE.md and the rules free of gotcha detail.
 
 ## See also
 
-- `src/CLAUDE.md` — coding conventions, naming rule, area index into the per-subtree files
+- `.claude/rules/src-conventions.md` — coding conventions, naming rule, area index into the per-area rules (all load lazily by path)
 - `docs/{GOTCHAS,ARCHITECTURE,IPC}.md` — gotcha detail, component diagrams, wire protocol
-- `.claude/PLAN.md` — roadmap + open questions
+- `.claude/PLAN.md` — roadmap index → `.claude/plans/` (active work, decisions, open questions; completed work archived under `plans/completed/`)
 - `.claude/skills/{build,verify,release,multi-agent}/SKILL.md` — build, validation, release, parallel-work scoping

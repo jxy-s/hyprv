@@ -1,3 +1,8 @@
+---
+paths:
+  - "src/app/vm/**"
+---
+
 # src/app/vm/ — VM state
 
 **Trap zone.** Before any state-change or `Modify*`/`Add*` WMI write, read the WMI section of `docs/GOTCHAS.md` and verify reversibly first — Hyper-V silently no-ops invalid writes. WMI primitives live in `src/app/wmi/`.

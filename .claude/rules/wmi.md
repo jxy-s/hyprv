@@ -1,3 +1,8 @@
+---
+paths:
+  - "src/app/wmi/**"
+---
+
 # src/app/wmi/ — WMI primitives
 
 **Trap zone.** Read the WMI section of `docs/GOTCHAS.md` before touching anything here. Hyper-V silently no-ops invalid `Modify*`/`Add*` writes — replicate the mutation reversibly (throwaway VM via `Invoke-CimMethod`, confirm with raw `Get-CimInstance`, restore) before coding it.
